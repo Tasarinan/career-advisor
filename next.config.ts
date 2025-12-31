@@ -1,17 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  devIndicators: {
-    appIsrStatus: false,
-  },
-  
-  // Configure webpack to ignore the external folder
-  webpack: (config: any) => {
-    config.watchOptions = {
-      ...config.watchOptions,
-      ignored: ['**/Chinesename.club/**', '**/node_modules/**'],
-    };
+  /* config options here */
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.json$/,
+      type: 'asset/resource',
+    });
+    
     return config;
+  },
+  experimental: {
+    turbo: {
+      resolveAlias: {
+        '*.json': '*.json',
+      },
+    },
   },
 };
 

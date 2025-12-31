@@ -1,422 +1,305 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { useUser } from "@/hooks/use-user";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect, useRef } from 'react';
+import { JobTitleSchema } from '../schemas/jobTitleSchema';
+import SearchInput from '@/components/SearchInput';
+import RoadmapVisualizer from '@/components/RoadmapVisualizer';
+import LoadingAnimation from '@/components/LoadingAnimation';
+import Features from '@/components/Features';
+import { fetchRoadmap } from '@/utils/api';
+import { RoadmapData } from '@/types/roadmap';
+import Script from 'next/script';
+import dynamic from 'next/dynamic';
 
-import NameGeneratorForm from "@/components/product/generator/name-generator-form";
-import ChineseNamePricing from "@/components/product/pricing/chinese-name-pricing";
-import PopularNames from "@/components/product/popular/popular-names";
-import { saveFormData, loadFormData } from "@/utils/form-storage";
-
-interface NameData {
-  chinese: string;
-  pinyin: string;
-  characters: Array<{
-    character: string;
-    pinyin: string;
-    meaning: string;
-    explanation: string;
-  }>;
-  meaning: string;
-  culturalNotes: string;
-  personalityMatch: string;
-  style: string;
-}
-
-interface FormData {
-  englishName: string;
-  gender: 'male' | 'female' | 'other';
-  birthYear?: string;
-  personalityTraits?: string;
-  namePreferences?: string;
-  planType: '1' | '4';
-}
+const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
 
 export default function Home() {
-  const router = useRouter();
-  const { user, loading } = useUser();
-  const { toast } = useToast();
+  const [roadmapData, setRoadmapData] = useState<RoadmapData | null>(null);
+  const [searchedJob, setSearchedJob] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loadingStage, setLoadingStage] = useState<number>(0);
+  const [showPopup, setShowPopup] = useState<boolean>(false);
+  const [isClosing, setIsClosing] = useState<boolean>(false);
   
-  // UI state
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [hasTriedFree, setHasTriedFree] = useState(false);
+  const [showLoadingPopup, setShowLoadingPopup] = useState<boolean>(false);
+  const loadingPopupRef = useRef<HTMLDivElement>(null);
+  const [animationData, setAnimationData] = useState<any>(null);
 
-  // Check localStorage for previous free trial usage
+  const handleClosePopup = () => {
+    setIsClosing(true);
+    setTimeout(() => {
+      setShowPopup(false);
+      setIsClosing(false);
+    }, 300);
+  };
+
   useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        const hasUsedFree = localStorage.getItem('hasTriedFreeGeneration') === 'true';
-        setHasTriedFree(hasUsedFree);
-      } else {
-        // Clear localStorage flag for authenticated users
-        localStorage.removeItem('hasTriedFreeGeneration');
-        setHasTriedFree(false);
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && showPopup) {
+        handleClosePopup();
       }
-    }
-  }, [user, loading]);
+    };
 
-  // Load saved form data
-  const [savedFormData, setSavedFormData] = useState<any>(null);
+    window.addEventListener('keydown', handleEscKey);
+    return () => {
+      window.removeEventListener('keydown', handleEscKey);
+    };
+  }, [showPopup]);
+
   useEffect(() => {
-    const loadedData = loadFormData();
-    if (loadedData) {
-      setSavedFormData(loadedData);
+    if (showLoadingPopup || showPopup) {
+      const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    } else {
+      document.body.style.overflow = 'unset';
+      document.body.style.paddingRight = '0px';
     }
+
+    return () => {
+      document.body.style.overflow = 'unset';
+      document.body.style.paddingRight = '0px';
+    };
+  }, [showLoadingPopup, showPopup]);
+
+  useEffect(() => {
+    const loadAnimation = async () => {
+      try {
+        const response = await fetch('/businessman-rocket.json');
+        const animationData = await response.json();
+        setAnimationData(animationData);
+      } catch (error) {
+        console.error("Error loading Lottie animation:", error);
+        setAnimationData(null);
+      }
+    };
+    
+    loadAnimation();
   }, []);
 
-
-  const handleGenerate = async (formData: FormData) => {
-    // Check if it's a free trial attempt
-    if (!user && hasTriedFree) {
-      toast({
-        title: "Free trial used",
-        description: "You've already used your free generation. Please sign in for unlimited access!",
-      });
-      router.push('/sign-in');
+  const handleSearch = async (jobTitle: string) => {
+    if (jobTitle === '') {
+      setError(null);
       return;
     }
 
-    setIsGenerating(true);
+    const validationResult = JobTitleSchema.safeParse(jobTitle);
 
-    try {
-      const response = await fetch('/api/chinese-names/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        // Handle rate limiting specifically
-        if (response.status === 429 && data.rateLimited) {
-          toast({
-            title: "Daily limit reached",
-            description: data.error || "You can generate 3 free names per day. Please sign in for unlimited access!",
-          });
-          // Show sign-in option
-          setTimeout(() => {
-            router.push('/sign-in');
-          }, 3000);
-          return;
-        }
-        throw new Error(data.error || 'Failed to generate names');
-      }
-
-      // Calculate total rounds based on generation round
-      const estimatedTotalRounds = data.isContinuation 
-        ? Math.ceil(data.batch.totalNamesGenerated / 6)
-        : data.generationRound;
-
-      // Save results to sessionStorage and redirect to results page
-      const sessionData = {
-        names: data.names,
-        formData: formData,
-        batch: data.batch,
-        generationRound: data.generationRound,
-        totalGenerationRounds: estimatedTotalRounds,
-        isHistoryMode: false,
-      };
-      
-      sessionStorage.setItem('nameGenerationResults', JSON.stringify(sessionData));
-      
-      // Mark free trial as used for non-authenticated users
-      if (!user) {
-        setHasTriedFree(true);
-        localStorage.setItem('hasTriedFreeGeneration', 'true');
-      }
-
-      // Save form data to localStorage for future use
-      saveFormData({
-        englishName: formData.englishName,
-        gender: formData.gender,
-        birthYear: formData.birthYear,
-        personalityTraits: formData.personalityTraits,
-        namePreferences: formData.namePreferences
-      });
-
-      toast({
-        title: data.message || "Names generated successfully!",
-        description: `Generated ${data.names.length} unique Chinese names${data.creditsUsed ? ` using ${data.creditsUsed} credits` : ' for free'}`,
-      });
-      
-      // Navigate to results page
-      router.push('/results');
-    } catch (error) {
-      console.error('Generation error:', error);
-      const errorMessage = error instanceof Error ? error.message : "Something went wrong. Please try again.";
-      console.error('Detailed error:', errorMessage);
-      toast({
-        title: "Generation failed",
-        description: errorMessage,
-      });
-    } finally {
-      setIsGenerating(false);
+    if (!validationResult.success) {
+      const errorMessage = validationResult.error.format()._errors.join(', ');
+      setError(errorMessage);
+      return;
     }
-  };
 
-
-
-  const scrollToForm = () => {
-    const formSection = document.querySelector('[data-name-generator-form]');
-    if (formSection) {
-      formSection.scrollIntoView({ behavior: 'smooth' });
+    setError(null);
+    setRoadmapData(null);
+    setShowPopup(false);
+    setSearchedJob(validationResult.data);
+    
+    setShowLoadingPopup(true);
+    setIsLoading(true);
+    
+    try {
+      setLoadingStage(1);
+      
+      const loadingInterval = setInterval(() => {
+        setLoadingStage(prevStage => {
+          return prevStage < 10 ? prevStage + 1 : prevStage;
+        });
+      }, 2000);
+      
+      const data = await fetchRoadmap(validationResult.data);
+      setRoadmapData(data);
+      
+      clearInterval(loadingInterval);
+      
+      setLoadingStage(10);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setShowLoadingPopup(false);
+      setShowPopup(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred');
+      setRoadmapData(null);
+      
+      setShowLoadingPopup(false);
+    } finally {
+      setIsLoading(false);
+      setLoadingStage(0);
     }
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="relative py-20 lg:py-32 bg-gradient-to-b from-muted/20 to-background">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-        <div className="container px-4 md:px-6 relative">
-          <div className="flex flex-col items-center space-y-4 text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="space-y-6"
-            >
-              <div className="inline-flex items-center rounded-full px-3 py-1 text-sm bg-primary/10 text-primary mb-4">
-                <span className="mr-2">🇨🇳</span>
-                AI-Powered Chinese Name Generation
-              </div>
-              
-              <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
-                Discover Your Perfect
-                <br />
-                <span className="text-primary">Chinese Name</span>
-              </h1>
-              
-              <p className="mt-6 text-xl text-muted-foreground md:text-2xl max-w-3xl mx-auto">
-                Create your authentic Chinese identity with our advanced AI that understands cultural significance, personal meaning, and traditional naming conventions.
-              </p>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-                className="mt-8 flex flex-col sm:flex-row gap-4 justify-center"
-              >
-                <button
-                  onClick={scrollToForm}
-                  className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors shadow-lg"
-                >
-                  {loading ? 'Loading...' : !user ? (hasTriedFree ? '🔒 Sign In for More' : '🎁 Generate Free Name') : '🎯 Generate Name'}
-                </button>
-                <button
-                  onClick={() => {
-                    router.push('/product/random-generator');
-                  }}
-                  className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium border border-border text-foreground hover:bg-muted rounded-md transition-colors"
-                >
-                  Random Name Generator
-                </button>
-              </motion.div>
-              
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="flex items-center justify-center gap-8 pt-8 text-sm text-muted-foreground"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  {loading ? 'Loading...' : !user ? '3 free names daily' : 'Unlimited generation'}
+    <>
+      <Script id="schema-data" type="application/ld+json">
+        {JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "Career Advisor",
+          "url": process.env.NEXT_PUBLIC_URL,
+          "description": "AI-powered career planning tool that creates personalized roadmaps for professional growth.",
+          "applicationCategory": "Career Development Tool",
+          "operatingSystem": "Web Browser",
+          "creator": {
+            "@type": "Person",
+            "name": "Özer Özdoğan",
+            "url": process.env.NEXT_PUBLIC_URL,
+            "logo": `${process.env.NEXT_PUBLIC_URL}/logo.svg`	
+          }
+        })}
+      </Script>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+        <main className="py-0" role="main">
+          <div className="container mx-auto px-4 md:px-6 xl:max-w-7xl flex flex-col h-full overflow-x-hidden">
+          
+            <section className="flex flex-col lg:flex-row items-center justify-center gap-12 min-h-[calc(100vh-80px)] mb-10 pt-20 lg:pt-0">
+              <div className="lg:w-1/2 space-y-6 max-w-2xl z-1">
+                <div className="relative">
+                  <h1 className="text-4xl lg:text-5xl xl:text-6xl font-bold text-slate-800 tracking-tight leading-tight">
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+                      Discover
+                    </span>{" "}
+                    your career,<br />plan your future
+                  </h1>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  Instant generation
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                  Cultural accuracy
-                </div>
-              </motion.div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content */}
-      <section className="py-16 bg-background">
-        <div className="container px-4 md:px-6">
-          <div className="mx-auto max-w-6xl">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="space-y-12"
-            >
-              <div className="text-center space-y-4">
-                <h2 className="text-3xl font-bold tracking-tight text-foreground">
-                  Create Your Chinese Name
-                </h2>
-                <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                  Tell us about yourself and let our AI create a meaningful Chinese name that reflects your personality and cultural significance.
+                <p className="text-xl text-slate-600 leading-relaxed">
+                  Create the roadmap you need to reach your professional goals<br />with our AI-powered career planning tool.
                 </p>
-              </div>
-
-              <div id="name-generator-form" data-name-generator-form>
-                <NameGeneratorForm 
-                  onGenerate={handleGenerate}
-                  isGenerating={isGenerating}
-                  hasTriedFree={hasTriedFree}
-                  savedFormData={savedFormData}
-                />
                 
-                {/* Personal Center Button for authenticated users */}
-                {user && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.2 }}
-                    className="text-center mt-6"
-                  >
-                    <button
-                      onClick={() => router.push('/profile')}
-                      className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-primary hover:text-primary/80 transition-colors border border-primary/20 hover:border-primary/40 rounded-lg"
-                    >
-                      👤 Profile - View History & Saved Names
-                    </button>
-                  </motion.div>
+                <div className="mt-8 w-full">
+                  <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-slate-100 p-4 sm:p-6 transform transition-all duration-300 hover:shadow-xl">
+                    <SearchInput onSearch={handleSearch} isLoading={isLoading} />
+                    
+                    {error && (
+                      <div className="mt-4">
+                        <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded-lg" role="alert" aria-live="assertive">
+                          <p className="text-red-700 text-sm">{error}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {roadmapData && !isLoading && (
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <div className="text-left">
+                      <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                        Your career roadmap for <span className="text-emerald-600">{searchedJob}</span> is ready!
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        View the detailed career plan with recommended skills and milestones
+                      </p>
+                      <button
+                        onClick={() => setShowPopup(true)}
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-5 py-3 rounded-lg
+                          hover:from-emerald-600 hover:to-teal-700 cursor-pointer 
+                          transition-all duration-300 font-medium flex items-center
+                          space-x-3 shadow-md group"
+                        aria-label="View Career Plan"
+                      >
+                        <span>View Career Plan</span>
+                        <svg 
+                          className="w-5 h-5 group-hover:translate-x-1 transition-transform duration-300" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            strokeWidth={2} 
+                            d="M14 5l7 7m0 0l-7 7m7-7H3"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Popular Names Section */}
-      <section className="py-20 bg-gradient-to-b from-background to-muted/20" data-popular-names>
-        <div className="container px-4 md:px-6">
-          <div className="mx-auto max-w-6xl">
-            <PopularNames onScrollToGenerator={scrollToForm} />
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section id="features" className="py-20 bg-muted/20">
-        <div className="container px-4 md:px-6">
-          <div className="mx-auto max-w-6xl space-y-12 text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.4 }}
-              className="space-y-4"
-            >
-              <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-                Why Choose Our Chinese Name Generator?
-              </h2>
-              <p className="mx-auto max-w-3xl text-muted-foreground text-lg">
-                Advanced AI technology combined with deep cultural understanding to create meaningful Chinese names that truly represent you.
-              </p>
-            </motion.div>
+              
+              <div className="lg:w-1/2 relative flex justify-center items-center max-w-2xl">
+                <div className="absolute inset-0 w-full h-full opacity-90 z-0">
+                  <div className="cloud-w-1"><div className="cloud"></div></div>
+                  <div className="cloud-w-2"><div className="cloud"></div></div>
+                  <div className="cloud-w-3"><div className="cloud"></div></div>
+                  <div className="cloud-w-4"><div className="cloud"></div></div>
+                  <div className="cloud-w-5"><div className="cloud"></div></div>
+                </div>
+                <div className="relative z-10 w-full max-w-[600px] z-1 rotate-y-180">
+                  {animationData && (
+                    <Lottie
+                      animationData={animationData}
+                      loop={true}
+                      className="rocketman w-full h-[350px] md:h-[550px]"
+                    />
+                  )}
+                </div>
+              </div>
+            </section>
             
-            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.5 }}
-                className="rounded-2xl bg-background p-8 shadow-sm border border-border"
-              >
-                <div className="space-y-4">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-2xl">🤖</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground">AI-Powered Intelligence</h3>
-                  <p className="text-muted-foreground">
-                    Our advanced AI understands your personality traits, preferences, and cultural nuances to create names that truly represent you.
-                  </p>
-                </div>
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.6 }}
-                className="rounded-2xl bg-background p-8 shadow-sm border border-border"
-              >
-                <div className="space-y-4">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-2xl">🏮</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground">Cultural Authenticity</h3>
-                  <p className="text-muted-foreground">
-                    Each name is crafted with deep understanding of Chinese naming traditions, character meanings, and cultural significance.
-                  </p>
-                </div>
-              </motion.div>
-              
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.7 }}
-                className="rounded-2xl bg-background p-8 shadow-sm border border-border"
-              >
-                <div className="space-y-4">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                    <span className="text-2xl">⚡</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-foreground">Instant Generation</h3>
-                  <p className="text-muted-foreground">
-                    Get your personalized Chinese name in seconds, complete with detailed meanings, pronunciation guides, and cultural context.
-                  </p>
-                </div>
-              </motion.div>
+            <Features />
+          </div>
+        </main>
+
+        {showLoadingPopup && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm popup-overlay">
+            <div 
+              ref={loadingPopupRef}
+              className="w-full max-w-3xl mx-4 animate-scaleIn"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <LoadingAnimation stage={loadingStage} />
             </div>
           </div>
-        </div>
-      </section>
+        )}
 
-      {/* Pricing Section */}
-      <div id="pricing">
-        <ChineseNamePricing onScrollToForm={scrollToForm} />
-      </div>
-
-
-      {/* Final CTA Section */}
-      <section className="py-20 bg-gradient-to-b from-muted/10 to-background">
-        <div className="container px-4 md:px-6">
-          <div className="mx-auto max-w-4xl text-center space-y-8">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.9 }}
-              className="space-y-6"
+        {showPopup && (
+          <div 
+            className={`fixed inset-0 z-50 ${isClosing ? 'popup-overlay-exit' : 'popup-overlay'}`}
+          >
+            <div 
+              className="absolute inset-0 bg-black/50"
+              onClick={handleClosePopup}
+            />
+            <div 
+              className="fixed inset-0 flex items-center justify-center p-4"
+              onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl">
-                Start Your Cultural Journey Today
-              </h2>
-              <p className="mx-auto max-w-2xl text-muted-foreground text-lg">
-                Discover the perfect Chinese name that represents your identity, personality, and cultural connection.
-                <br />
-                Join thousands who have found their authentic Chinese identity.
-              </p>
-              <div className="flex flex-col sm:flex-row justify-center gap-4 pt-4">
-                <button 
-                  onClick={scrollToForm}
-                  className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors shadow-lg"
+              <div 
+                className={`relative w-full h-full bg-white rounded-lg shadow-xl overflow-hidden ${
+                  isClosing ? 'popup-content-exit' : 'popup-content'
+                }`}
+              >
+                <button
+                  onClick={handleClosePopup}
+                  className="absolute top-4 right-4 z-10 bg-white/80 backdrop-blur-sm rounded-full p-2 
+                            hover:bg-gray-100 transition-all duration-200 shadow-lg 
+                            hover:shadow-xl hover:scale-110 active:scale-95 cursor-pointer"
+                  aria-label="Close career roadmap"
                 >
-                  {loading ? 'Loading...' : !user ? (hasTriedFree ? '🔒 Sign In for Unlimited Names' : '🎁 Get Your Free Chinese Name') : '🎯 Generate Chinese Name'}
+                  <svg
+                    className="w-6 h-6 text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
                 </button>
-                <a 
-                  href="#chinese-name-pricing"
-                  className="inline-flex items-center justify-center h-14 px-8 text-lg font-medium text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  View Premium Features →
-                </a>
+                {roadmapData && <RoadmapVisualizer data={roadmapData} />}
               </div>
-            </motion.div>
+            </div>
           </div>
-        </div>
-      </section>
-    </div>
+        )}
+      </div>
+    </>
   );
 }

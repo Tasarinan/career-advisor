@@ -7,6 +7,8 @@ import { ThemeSwitcher } from "./theme-switcher";
 import { Logo } from "./logo";
 import { usePathname } from "next/navigation";
 import { MobileNav } from "./mobile-nav";
+import { useState, useRef, useEffect } from "react";
+import { ChevronDown } from "lucide-react";
 
 interface HeaderProps {
   user: any;
@@ -17,15 +19,33 @@ interface NavItem {
   href: string;
 }
 
+interface DropdownMenu {
+  label: string;
+  items: NavItem[];
+}
+
 export default function Header({ user }: HeaderProps) {
   const pathname = usePathname();
   const isDashboard = pathname?.startsWith("/dashboard");
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Main navigation items for Chinese Name Generator
+  // Main navigation items for Career Advisor
   const mainNavItems: NavItem[] = [
     { label: "Home", href: "/" },
-    { label: "Popular Names", href: "/product/popular-names" },
-    { label: "About", href: "/product/about" },
+    { label: "Pricing", href: "/#pricing" },
+  ];
+
+  // Dropdown menus
+  const dropdownMenus: DropdownMenu[] = [
+    {
+      label: "More",
+      items: [
+        { label: "About", href: "/about" },
+        { label: "Privacy", href: "/privacy" },
+        { label: "Terms", href: "/terms" },
+      ],
+    },
   ];
 
   // Dashboard items - empty array as we don't want navigation items in dashboard
@@ -33,6 +53,22 @@ export default function Header({ user }: HeaderProps) {
 
   // Choose which navigation items to show
   const navItems = isDashboard ? dashboardItems : mainNavItems;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleDropdown = (label: string) => {
+    setOpenDropdown(openDropdown === label ? null : label);
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -42,15 +78,43 @@ export default function Header({ user }: HeaderProps) {
         </div>
         
         {/* Centered Navigation */}
-        <nav className="hidden md:flex items-center gap-8 absolute left-1/2 transform -translate-x-1/2">
+        <nav className="hidden md:flex items-center gap-6 absolute left-1/2 transform -translate-x-1/2" ref={dropdownRef}>
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="text-lg font-semibold text-muted-foreground transition-colors hover:text-primary"
+              className="text-base font-medium text-muted-foreground transition-colors hover:text-primary"
             >
               {item.label}
             </Link>
+          ))}
+          
+          {/* Dropdown Menus */}
+          {!isDashboard && dropdownMenus.map((menu) => (
+            <div key={menu.label} className="relative">
+              <button
+                onClick={() => toggleDropdown(menu.label)}
+                className="flex items-center gap-1 text-base font-medium text-muted-foreground transition-colors hover:text-primary"
+              >
+                {menu.label}
+                <ChevronDown className={`h-4 w-4 transition-transform ${openDropdown === menu.label ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {openDropdown === menu.label && (
+                <div className="absolute top-full left-0 mt-2 w-40 rounded-md border bg-background shadow-lg py-1">
+                  {menu.items.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="block px-4 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                      onClick={() => setOpenDropdown(null)}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
 
@@ -89,7 +153,7 @@ export default function Header({ user }: HeaderProps) {
               </Button>
             </div>
           )}
-          <MobileNav items={navItems} user={user} isDashboard={isDashboard} />
+          <MobileNav items={[...navItems, ...dropdownMenus.flatMap(m => m.items)]} user={user} isDashboard={isDashboard} />
         </div>
       </div>
     </header>
