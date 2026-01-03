@@ -4,16 +4,30 @@ export function Logo() {
   return (
     <Link
       href="/"
-      className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+      className="flex items-center space-x-3 group hover:opacity-90 transition-opacity"
     >
-      <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-lg">
-        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      <div className="relative">
+        <svg
+          className="w-10 h-10 text-blue-600 relative"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 21v-6m0 6l4-4m-4 4l-4-4" />
+          <path d="M12 3v6m0-6l4 4m-4-4l-4 4" />
+          <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+          <path d="M19 12a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
       </div>
-      <span className="font-bold text-lg bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-        Career Advisor
-      </span>
+      <div className="flex flex-col">
+        <span className="text-xl font-bold text-slate-800 md:leading-tight leading-[18px]">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Career</span> Advisor
+        </span>
+        <span className="text-xs text-slate-500">Your Path to Success</span>
+      </div>
     </Link>
   );
 }

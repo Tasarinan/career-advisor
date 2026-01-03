@@ -6,6 +6,7 @@ import SearchInput from '@/components/SearchInput';
 import RoadmapVisualizer from '@/components/RoadmapVisualizer';
 import LoadingAnimation from '@/components/LoadingAnimation';
 import Features from '@/components/Features';
+import Pricing from '@/components/Pricing';
 import { fetchRoadmap } from '@/utils/api';
 import { RoadmapData } from '@/types/roadmap';
 import Script from 'next/script';
@@ -241,6 +242,8 @@ export default function Home() {
             
             <Features />
           </div>
+          
+          <Pricing />
         </main>
 
         {showLoadingPopup && (

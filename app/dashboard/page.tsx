@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { SubscriptionStatusCard } from "@/components/dashboard/subscription-status-card";
 import { CreditsBalanceCard } from "@/components/dashboard/credits-balance-card";
 import { QuickActionsCard } from "@/components/dashboard/quick-actions-card";
-import { MyNamesCard } from "@/components/dashboard/my-names-card";
-import { GenerationHistoryCard } from "@/components/dashboard/generation-history-card";
+import { MyRoadmapsCard } from "@/components/dashboard/my-roadmaps-card";
+import { RoadmapHistoryCard } from "@/components/dashboard/roadmap-history-card";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -43,15 +43,16 @@ export default async function DashboardPage() {
   const recentCreditsHistory = customerData?.credits_history?.slice(0, 2) || [];
 
   return (
-    <div className="flex-1 w-full flex flex-col gap-6 sm:gap-8 px-4 sm:px-8 container">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+      <div className="flex-1 w-full flex flex-col gap-6 sm:gap-8 px-4 sm:px-8 container">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 border rounded-lg p-6 sm:p-8 mt-6 sm:mt-8">
+      <div className="bg-white/90 backdrop-blur-sm border border-slate-100 rounded-lg p-6 sm:p-8 mt-6 sm:mt-8">
         <h1 className="text-2xl sm:text-3xl font-bold mb-2 break-words">
           Welcome back,{" "}
           <span className="block sm:inline mt-1 sm:mt-0">{user.email}</span>
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground">
-          Manage your Chinese names, view your generation history, and track your usage.
+          Manage your career roadmaps, view your history, and track your progress.
         </p>
       </div>
 
@@ -67,12 +68,12 @@ export default async function DashboardPage() {
 
       {/* Main Content Grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <MyNamesCard />
-        <GenerationHistoryCard />
+        <MyRoadmapsCard />
+        <RoadmapHistoryCard />
       </div>
 
       {/* Account Details Section */}
-      <div className="rounded-xl border bg-card p-4 sm:p-6 mb-6">
+      <div className="rounded-xl border border-slate-100 bg-white/90 backdrop-blur-sm p-4 sm:p-6 mb-6">
         <h2 className="font-bold text-lg sm:text-xl mb-4">Account Details</h2>
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -86,6 +87,7 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

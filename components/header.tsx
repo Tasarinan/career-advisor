@@ -71,7 +71,7 @@ export default function Header({ user }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="bg-white/85 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 shadow-sm">
       <div className="container flex h-16 items-center justify-between px-4">
         <div className="flex items-center">
           <Logo />
